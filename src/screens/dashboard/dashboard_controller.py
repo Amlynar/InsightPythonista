@@ -1,12 +1,15 @@
-﻿from decimal import ROUND_HALF_UP, Decimal
+﻿import threading
+import time
+from decimal import ROUND_HALF_UP, Decimal
 
 import ui
 from injector import inject
 
 from common.insight_cache import InsightCache
-from common.insight_client import InsightClient
+from common.insight_client import SYNC_RUNNING, InsightClient
 from common.insight_settings import InsightSettingsStore
 from common.insight_totals import compute_totals
+from common.settings_changed_notifier import SettingsChangedNotifier
 from common.time_utils import relative_time
 from framework.mvc.controller import PYIController
 from framework.style.theme import PYITheme
@@ -21,12 +24,16 @@ def format_money(value: Decimal) -> str:
     return f"{sign}${abs(cents):,.2f}"
 
 
+SYNC_POLL_INTERVAL_SECONDS = 2
+SYNC_TIMEOUT_SECONDS = 60
+
+
 class DashboardController(PYIController):
 
     @inject
     def __init__(self, model: DashboardModel, view: DashboardView, theme: PYITheme,
                  settings_store: InsightSettingsStore, cache: InsightCache,
-                 client: InsightClient):
+                 client: InsightClient, settings_notifier: SettingsChangedNotifier):
         super().__init__()
         self.model = model
         self.view = view
@@ -35,6 +42,12 @@ class DashboardController(PYIController):
         self.cache = cache
         self.client = client
 
+        # One network operation at a time; a request that arrives while busy
+        # (e.g. Settings save) is re-run once the current one finishes.
+        self._lock = threading.Lock()
+        self._rerun_refresh = False
+
+        settings_notifier.subscribe(self.refresh)
         self.view.init_root_view(data_source=self)
 
     def on_screen_loaded(self):
@@ -50,9 +63,27 @@ class DashboardController(PYIController):
     def settings_action(self, sender):
         self.navigate(SettingsScreenRoute())
 
+    def refresh_action(self, sender):
+        self.refresh()
+
+    # --- Refresh (GET /accounts) ----------------------------------------
+
     @ui.in_background
     def refresh(self):
-        settings = self.settings_store.load()
+        if not self._lock.acquire(blocking=False):
+            self._rerun_refresh = True
+            return
+        try:
+            self._refresh_work()
+        finally:
+            self._lock.release()
+        if self._rerun_refresh:
+            self._rerun_refresh = False
+            self.refresh()
+
+    def _refresh_work(self):
+        """Fetch /accounts, update model + cache. Caller must hold the lock."""
+        settings = self.settings_store.load()   # read fresh on every request
         if not settings.is_complete:
             self.model.settings_missing = True
             self.model.refresh_error = None
@@ -60,6 +91,7 @@ class DashboardController(PYIController):
             return
 
         self.model.settings_missing = False
+        self.model.sync_notice = None
         try:
             self.view.set_refreshing(True)
             response = self.client.fetch_accounts(settings.base_url, settings.api_key)
@@ -74,6 +106,58 @@ class DashboardController(PYIController):
             self.view.set_refreshing(False)
             self.render()
 
+    # --- Sync Now (POST /sync, poll /sync/status, then Refresh) ---------
+
+    @ui.in_background
+    def sync_now_action(self, sender):
+        if not self._lock.acquire(blocking=False):
+            return
+        try:
+            self.view.set_syncing(True)
+            self._sync_work()
+        finally:
+            self.view.set_syncing(False)
+            self._lock.release()
+
+    def _sync_work(self):
+        settings = self.settings_store.load()
+        if not settings.is_complete:
+            self.model.settings_missing = True
+            self.model.refresh_error = None
+            self.render()
+            return
+
+        self.model.settings_missing = False
+        self.model.sync_notice = None
+        self.model.refresh_error = None
+        self.render()
+
+        started = time.monotonic()
+        try:
+            result = self.client.start_sync(settings.base_url, settings.api_key)
+            if result.needs_polling:
+                # Covers both a fresh 202 and a joined 202: poll the same way.
+                while True:
+                    if time.monotonic() - started >= SYNC_TIMEOUT_SECONDS:
+                        self.model.sync_notice = (
+                            "Sync still running in the background \u2014 "
+                            "refresh later to see updated numbers.")
+                        self.render()
+                        return
+                    time.sleep(SYNC_POLL_INTERVAL_SECONDS)
+                    status = self.client.get_sync_status(
+                        settings.base_url, settings.api_key, result.run_id)
+                    if status != SYNC_RUNNING:
+                        break
+        except Exception as e:
+            self.model.refresh_error = self._refresh_error_text(e)
+            self.render()
+            return
+
+        # Finished (any non-RUNNING status) or skipped (SYNCED_RECENTLY):
+        # plain Refresh. PARTIAL/FAILED is surfaced by the reauth banner logic.
+        self._refresh_work()
+
     def _refresh_error_text(self, error: Exception) -> str:
         if isinstance(error, RuntimeError):
             # e.g. PYIHomeLabSession's "CA cert not downloaded" - surface verbatim.
@@ -81,7 +165,6 @@ class DashboardController(PYIController):
         if self.model.cached_at:
             return f"Couldn't refresh \u2014 showing data from {relative_time(self.model.cached_at)}"
         return "Couldn't refresh"
-
     def render(self):
         response = self.model.response
         if response is None:
@@ -91,6 +174,7 @@ class DashboardController(PYIController):
                 empty = "No data yet \u2014 check Settings and your connection"
             self.view.render(net=None, cash=None, liability=None, last_updated=None,
                              refresh_error=self.model.refresh_error,
+                             sync_notice=self.model.sync_notice,
                              reauth_text=None, empty_text=empty)
             return
 
@@ -101,6 +185,7 @@ class DashboardController(PYIController):
             liability=format_money(totals.total_liability),
             last_updated=f"Last updated: {relative_time(self.model.cached_at)}",
             refresh_error=self.model.refresh_error,
+            sync_notice=self.model.sync_notice,
             reauth_text=self._reauth_text(response),
             empty_text=None,
         )
@@ -121,3 +206,4 @@ class DashboardController(PYIController):
         else:
             subject, verb = ", ".join(names[:-1]) + " and " + names[-1], "need"
         return f"{subject} {verb} reauthorization \u2014 totals may be out of date"
+

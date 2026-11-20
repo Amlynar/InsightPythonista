@@ -30,7 +30,7 @@ class DashboardView(PYIScreen):
         top = pad
 
         # Banners (only the visible ones take space)
-        for banner in (self.refresh_banner, self.reauth_banner):
+        for banner in (self.refresh_banner, self.sync_banner, self.reauth_banner):
             if banner.hidden:
                 continue
             banner.frame = (pad, top, width, 40)
@@ -38,19 +38,23 @@ class DashboardView(PYIScreen):
 
         if self.empty_label.hidden is False:
             self.empty_label.frame = (pad, top + pad, width, 80)
-            return
+            top += pad + 80 + gap
+        else:
+            self.net_card.frame = (pad, top, width, 130)
+            top += 130 + gap
 
-        self.net_card.frame = (pad, top, width, 130)
-        top += 130 + gap
+            half = (width - gap) / 2
+            self.cash_card.frame = (pad, top, half, 90)
+            self.liability_card.frame = (pad + half + gap, top, half, 90)
+            top += 90 + gap
 
-        half = (width - gap) / 2
-        self.cash_card.frame = (pad, top, half, 90)
-        self.liability_card.frame = (pad + half + gap, top, half, 90)
-        top += 90 + gap
+            status_height = 20
+            self.last_updated_label.frame = (pad, top, width - 30, status_height)
+            self.refresh_spinner.center = (self.width - pad - 10, top + status_height / 2)
+            top += status_height + gap
 
-        status_height = 20
-        self.last_updated_label.frame = (pad, top, width - 30, status_height)
-        self.refresh_spinner.center = (self.width - pad - 10, top + status_height / 2)
+        self.sync_btn.frame = (pad, top, width, 36)
+        self.sync_spinner.center = self.sync_btn.center
 
     def init_root_view(self, data_source):
         self.net_card, self.net_title, self.net_value = self._make_card(
@@ -67,7 +71,20 @@ class DashboardView(PYIScreen):
         PYISpinnerStyle.loading(self.refresh_spinner, self.theme)
 
         self.refresh_banner = self._make_banner(BANNER_ERROR_BACKGROUND, BANNER_ERROR_TEXT)
+        self.sync_banner = self._make_banner(BANNER_ERROR_BACKGROUND, BANNER_ERROR_TEXT)
         self.reauth_banner = self._make_banner(BANNER_WARNING_BACKGROUND, BANNER_WARNING_TEXT)
+
+        # Secondary action: outlined, not filled like Settings' prominent Save.
+        self.sync_btn = ui.Button(title='Sync Now')
+        self.sync_btn.font = ('<system>', 15)
+        self.sync_btn.tint_color = self.theme.accent_color
+        self.sync_btn.border_width = 1
+        self.sync_btn.border_color = self.theme.accent_color
+        self.sync_btn.corner_radius = 8
+        self.sync_btn.action = data_source.sync_now_action
+
+        self.sync_spinner = ui.ActivityIndicator()
+        PYISpinnerStyle.loading(self.sync_spinner, self.theme)
 
         self.empty_label = ui.Label()
         PYILabelStyle.normal(self.empty_label, self.theme)
@@ -77,7 +94,8 @@ class DashboardView(PYIScreen):
         for v in (
             self.net_card, self.cash_card, self.liability_card,
             self.last_updated_label, self.refresh_spinner,
-            self.refresh_banner, self.reauth_banner, self.empty_label,
+            self.refresh_banner, self.sync_banner, self.reauth_banner, self.empty_label,
+            self.sync_btn, self.sync_spinner,
         ):
             self.root_view.add_subview(v)
 
@@ -85,10 +103,14 @@ class DashboardView(PYIScreen):
         self.settings_button_item.action = data_source.settings_action
         self.right_button_items = [self.settings_button_item]
 
+        self.refresh_button_item = ui.ButtonItem(image=ui.Image.named('iob:refresh_24'))
+        self.refresh_button_item.action = data_source.refresh_action
+        self.left_button_items = [self.refresh_button_item]
+
     # --- rendering -------------------------------------------------------
 
     def render(self, *, net, cash, liability, last_updated, refresh_error,
-               reauth_text, empty_text):
+               sync_notice, reauth_text, empty_text):
         """Any of net/cash/liability/last_updated may be None when there is no data."""
         has_data = empty_text is None
         for v in (self.net_card, self.cash_card, self.liability_card, self.last_updated_label):
@@ -103,6 +125,7 @@ class DashboardView(PYIScreen):
             self.last_updated_label.text = last_updated
 
         self._set_banner(self.refresh_banner, refresh_error)
+        self._set_banner(self.sync_banner, sync_notice)
         self._set_banner(self.reauth_banner, reauth_text)
         self.layout()
 
@@ -114,6 +137,14 @@ class DashboardView(PYIScreen):
             self.refresh_spinner.start()
         else:
             self.refresh_spinner.stop()
+
+    def set_syncing(self, syncing: bool):
+        # Same pattern as other async actions: hide button, show spinner.
+        self.sync_btn.hidden = syncing
+        if syncing:
+            self.sync_spinner.start()
+        else:
+            self.sync_spinner.stop()
 
     # --- builders --------------------------------------------------------
 

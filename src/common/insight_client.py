@@ -18,6 +18,10 @@ class InsightClient:
     RuntimeError) means "treat this fetch as failed".
     """
 
+    def __init__(self):
+        # Explicit ctor: Injector can't inspect object.__init__ on Pythonista.
+        pass
+
     def fetch_accounts(self, base_url: str, api_key: str) -> dict:
         url = base_url.strip().rstrip("/") + "/api/v1/accounts"
         session = PYIHomeLabSession()

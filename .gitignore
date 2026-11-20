@@ -1,0 +1,29 @@
+﻿# Local tooling config
+.opencode/
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# App data / secrets (never commit)
+insight_cache.json
+insight_settings.json
+*.tmp
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

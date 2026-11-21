@@ -178,20 +178,39 @@ class DashboardController(PYIController):
                              reauth_text=None, empty_text=empty)
             return
 
-        totals = compute_totals(response.get("accounts"))
+        accounts = response.get("accounts")
+        if not accounts:
+            # hasStaleData is false here, but that means "nothing flagged",
+            # not "up to date" - show an empty state.
+            self.view.render(net=None, cash=None, liability=None, last_updated=None,
+                             refresh_error=self.model.refresh_error,
+                             sync_notice=self.model.sync_notice,
+                             reauth_text=None,
+                             empty_text="No accounts yet \u2014 nothing has been imported")
+            return
+
+        totals = compute_totals(accounts)
         self.view.render(
             net=format_money(totals.net_position),
             cash=format_money(totals.total_cash),
             liability=format_money(totals.total_liability),
-            last_updated=f"Last updated: {relative_time(self.model.cached_at)}",
+            last_updated=self._last_updated_text(response),
             refresh_error=self.model.refresh_error,
             sync_notice=self.model.sync_notice,
-            reauth_text=self._reauth_text(response),
+            reauth_text=self._stale_text(response),
             empty_text=None,
         )
 
     @staticmethod
-    def _reauth_text(response: dict) -> str | None:
+    def _last_updated_text(response: dict) -> str:
+        # asOf = newest fetchedAt across accounts (display only).
+        as_of = response.get("asOf")
+        if not as_of:
+            return "No balance data yet"
+        return f"Newest data: {relative_time(as_of)}"
+
+    @staticmethod
+    def _stale_text(response: dict) -> str | None:
         if not response.get("hasStaleData"):
             return None
         names = []
@@ -199,11 +218,20 @@ class DashboardController(PYIController):
             name = link.get("institutionName") or "An institution"
             if name not in names:
                 names.append(name)
-        if not names:
-            return "Some accounts need reauthorization \u2014 totals may be out of date"
-        if len(names) == 1:
-            subject, verb = names[0], "needs"
-        else:
-            subject, verb = ", ".join(names[:-1]) + " and " + names[-1], "need"
-        return f"{subject} {verb} reauthorization \u2014 totals may be out of date"
+        missing = sum(1 for a in response.get("accounts") or []
+                      if a.get("balance") is None)
+
+        parts = []
+        if names:
+            if len(names) == 1:
+                subject, verb = names[0], "needs"
+            else:
+                subject, verb = ", ".join(names[:-1]) + " and " + names[-1], "need"
+            parts.append(f"{subject} {verb} reauthorization")
+        if missing:
+            noun = "account has" if missing == 1 else "accounts have"
+            parts.append(f"{missing} {noun} no data yet (not in totals)")
+        if not parts:
+            parts.append("Some accounts have old data")
+        return "; ".join(parts) + " \u2014 totals may be out of date"
 

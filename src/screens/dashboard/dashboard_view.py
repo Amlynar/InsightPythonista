@@ -60,9 +60,11 @@ class DashboardView(PYIScreen):
         self.net_card, self.net_title, self.net_value = self._make_card(
             'NET POSITION', self.theme.accent_color, value_size=40)
         self.cash_card, self.cash_title, self.cash_value = self._make_card(
-            'TOTAL CASH', CASH_ACCENT, value_size=22)
+            'TOTAL CASH  \u203a', CASH_ACCENT, value_size=22,
+            on_tap=data_source.cash_card_action)
         self.liability_card, self.liability_title, self.liability_value = self._make_card(
-            'TOTAL LIABILITY', LIABILITY_ACCENT, value_size=22)
+            'TOTAL LIABILITY  \u203a', LIABILITY_ACCENT, value_size=22,
+            on_tap=data_source.liability_card_action)
 
         self.last_updated_label = ui.Label()
         PYILabelStyle.caption(self.last_updated_label, self.theme)
@@ -163,7 +165,7 @@ class DashboardView(PYIScreen):
         label.hidden = True
         return label
 
-    def _make_card(self, title, accent, value_size):
+    def _make_card(self, title, accent, value_size, on_tap=None):
         card = ui.View()
         card.background_color = CARD_BACKGROUND
         card.corner_radius = 10
@@ -187,4 +189,12 @@ class DashboardView(PYIScreen):
 
         card.add_subview(title_label)
         card.add_subview(value_label)
+
+        if on_tap:
+            # ui.View has no tap action: overlay an invisible button.
+            tap = ui.Button()
+            tap.flex = 'WH'
+            tap.frame = (0, 0, card.width, card.height)
+            tap.action = on_tap
+            card.add_subview(tap)
         return card, title_label, value_label

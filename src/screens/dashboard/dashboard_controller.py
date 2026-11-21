@@ -1,27 +1,22 @@
 ﻿import threading
 import time
-from decimal import ROUND_HALF_UP, Decimal
 
 import ui
 from injector import inject
 
+from common.formatting import format_money
 from common.insight_cache import InsightCache
 from common.insight_client import SYNC_RUNNING, InsightClient
 from common.insight_settings import InsightSettingsStore
-from common.insight_totals import compute_totals
+from common.insight_totals import CASH, LIABILITY, compute_totals
 from common.settings_changed_notifier import SettingsChangedNotifier
 from common.time_utils import relative_time
 from framework.mvc.controller import PYIController
 from framework.style.theme import PYITheme
-from navigation.routes import SettingsScreenRoute
+from navigation.routes import AccountListScreenRoute, SettingsScreenRoute
 from screens.dashboard.dashboard_model import DashboardModel
 from screens.dashboard.dashboard_view import DashboardView
 
-
-def format_money(value: Decimal) -> str:
-    cents = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    sign = "-" if cents < 0 else ""
-    return f"{sign}${abs(cents):,.2f}"
 
 
 SYNC_POLL_INTERVAL_SECONDS = 2
@@ -65,6 +60,20 @@ class DashboardController(PYIController):
 
     def refresh_action(self, sender):
         self.refresh()
+
+    def cash_card_action(self, sender):
+        self._open_account_list(CASH)
+
+    def liability_card_action(self, sender):
+        self._open_account_list(LIABILITY)
+
+    def _open_account_list(self, category: str):
+        # Snapshot of what's on screen; refresh replaces model.response rather
+        # than mutating it, so the pushed list is stable.
+        response = self.model.response
+        if response and response.get("accounts"):
+            self.navigate(AccountListScreenRoute(category, response))
+
 
     # --- Refresh (GET /accounts) ----------------------------------------
 

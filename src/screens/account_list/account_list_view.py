@@ -10,7 +10,6 @@ from framework.style.style_table_view_cell import PYITableViewCellStyle
 from framework.style.theme import PYITheme
 
 ROW_HEIGHT = 64
-BALANCE_WIDTH = 120
 
 
 class AccountListView(PYIScreen):
@@ -18,6 +17,7 @@ class AccountListView(PYIScreen):
     def __init__(self, theme: PYITheme):
         super().__init__(theme=theme)
         self.theme = theme
+        self._last_table_width = None
 
     def layout(self):
         super().layout()
@@ -29,6 +29,11 @@ class AccountListView(PYIScreen):
         top = pad + 30 + 8
         self.table.frame = (0, top, self.width, max(self.height - top, 0))
         self.empty_label.frame = (pad, top + pad, width, 40)
+        # Rebuild cells whenever the width changes (rotation) so none keep a
+        # stale width from before the table reached its final size.
+        if self._last_table_width != self.table.width:
+            self._last_table_width = self.table.width
+            self.table.reload()
 
     def init_root_view(self, data_source):
         self.header_label = ui.Label()
@@ -62,56 +67,23 @@ class AccountListView(PYIScreen):
         self.show_content(self.root_view)
 
     def make_row_cell(self, row):
-        cell = ui.TableViewCell()
+        # Native 'value1' cell: title left, balance right. iOS lays this out
+        # for the cell's real width, so there is no hand-computed geometry
+        # that could go stale across rotation.
+        cell = ui.TableViewCell('value1')
         PYITableViewCellStyle.subtitle(cell, self.theme)
-        content = AccountRowContent(row, self.theme)
-        content.frame = (0, 0, self.table.width, ROW_HEIGHT)
-        content.flex = 'WH'
-        cell.content_view.add_subview(content)
+
+        title = row.title
+        if row.tag_text:
+            title = f"{row.title}\n{row.tag_text}"
+        cell.text_label.text = title
+        cell.text_label.number_of_lines = 0
+        cell.text_label.font = ('<system>', 16)
+        if row.tag_kind == TAG_REAUTH:
+            cell.text_label.text_color = BANNER_WARNING_TEXT
+
+        cell.detail_text_label.text = row.balance_text
+        cell.detail_text_label.font = ('<system-bold>', 16)
         return cell
 
 
-class AccountRowContent(ui.View):
-    """Row content that lays itself out from its *current* width.
-
-    Cells are created before the table has its final size and survive
-    rotation, so frames must be recomputed in layout(), not at creation.
-    """
-
-    def __init__(self, row, theme):
-        super().__init__()
-        self.background_color = theme.view_background_color
-
-        self.title = ui.Label()
-        self.title.font = ('<system>', 16)
-        self.title.text = row.title
-        self.title.line_break_mode = ui.LB_TRUNCATE_TAIL
-
-        self.balance = ui.Label()
-        self.balance.font = ('<system-bold>', 16)
-        self.balance.alignment = ui.ALIGN_RIGHT
-        self.balance.text = row.balance_text
-        self.balance.adjusts_font_size_to_fit = True
-
-        self.tag = None
-        if row.tag_text:
-            self.tag = ui.Label()
-            self.tag.text = row.tag_text
-            if row.tag_kind == TAG_REAUTH:
-                self.tag.font = ('<system-bold>', 13)
-                self.tag.text_color = BANNER_WARNING_TEXT
-            else:
-                self.tag.font = ('<system>', 13)
-                self.tag.text_color = theme.secondary_text_color
-            self.add_subview(self.tag)
-
-        self.add_subview(self.title)
-        self.add_subview(self.balance)
-
-    def layout(self):
-        pad = 16
-        w = self.width
-        self.balance.frame = (w - pad - BALANCE_WIDTH, 8, BALANCE_WIDTH, 24)
-        self.title.frame = (pad, 8, max(w - pad * 3 - BALANCE_WIDTH, 0), 24)
-        if self.tag:
-            self.tag.frame = (pad, 36, max(w - pad * 2, 0), 18)

@@ -64,36 +64,54 @@ class AccountListView(PYIScreen):
     def make_row_cell(self, row):
         cell = ui.TableViewCell()
         PYITableViewCellStyle.subtitle(cell, self.theme)
-        width = self.table.width
-        pad = 16
-
-        title = ui.Label()
-        title.font = ('<system>', 16)
-        title.text = row.title
-        title.flex = 'W'
-        title.frame = (pad, 8, width - pad * 2 - BALANCE_WIDTH, 24)
-
-        balance = ui.Label()
-        balance.font = ('<system-bold>', 16)
-        balance.alignment = ui.ALIGN_RIGHT
-        balance.text = row.balance_text
-        balance.flex = 'L'
-        balance.frame = (width - pad - BALANCE_WIDTH, 8, BALANCE_WIDTH, 24)
-
-        cell.content_view.add_subview(title)
-        cell.content_view.add_subview(balance)
-
-        if row.tag_text:
-            tag = ui.Label()
-            tag.text = row.tag_text
-            tag.flex = 'W'
-            tag.frame = (pad, 36, width - pad * 2, 18)
-            if row.tag_kind == TAG_REAUTH:
-                tag.font = ('<system-bold>', 13)
-                tag.text_color = BANNER_WARNING_TEXT
-            else:
-                tag.font = ('<system>', 13)
-                tag.text_color = self.theme.secondary_text_color
-            cell.content_view.add_subview(tag)
+        content = AccountRowContent(row, self.theme)
+        content.frame = (0, 0, self.table.width, ROW_HEIGHT)
+        content.flex = 'WH'
+        cell.content_view.add_subview(content)
         return cell
 
+
+class AccountRowContent(ui.View):
+    """Row content that lays itself out from its *current* width.
+
+    Cells are created before the table has its final size and survive
+    rotation, so frames must be recomputed in layout(), not at creation.
+    """
+
+    def __init__(self, row, theme):
+        super().__init__()
+        self.background_color = theme.view_background_color
+
+        self.title = ui.Label()
+        self.title.font = ('<system>', 16)
+        self.title.text = row.title
+        self.title.line_break_mode = ui.LB_TRUNCATE_TAIL
+
+        self.balance = ui.Label()
+        self.balance.font = ('<system-bold>', 16)
+        self.balance.alignment = ui.ALIGN_RIGHT
+        self.balance.text = row.balance_text
+        self.balance.adjusts_font_size_to_fit = True
+
+        self.tag = None
+        if row.tag_text:
+            self.tag = ui.Label()
+            self.tag.text = row.tag_text
+            if row.tag_kind == TAG_REAUTH:
+                self.tag.font = ('<system-bold>', 13)
+                self.tag.text_color = BANNER_WARNING_TEXT
+            else:
+                self.tag.font = ('<system>', 13)
+                self.tag.text_color = theme.secondary_text_color
+            self.add_subview(self.tag)
+
+        self.add_subview(self.title)
+        self.add_subview(self.balance)
+
+    def layout(self):
+        pad = 16
+        w = self.width
+        self.balance.frame = (w - pad - BALANCE_WIDTH, 8, BALANCE_WIDTH, 24)
+        self.title.frame = (pad, 8, max(w - pad * 3 - BALANCE_WIDTH, 0), 24)
+        if self.tag:
+            self.tag.frame = (pad, 36, max(w - pad * 2, 0), 18)

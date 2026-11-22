@@ -1,6 +1,7 @@
-﻿import ui
+import ui
 from injector import inject
 
+from common.account_row_view import AccountRowView
 from common.account_rows import TAG_REAUTH
 from common.palette import BANNER_WARNING_TEXT
 from framework.mvc.screen import PYIScreen
@@ -67,60 +68,12 @@ class AccountListView(PYIScreen):
         self.show_content(self.root_view)
 
     def make_row_cell(self, row):
-        # The balance is sized to its full text and pinned right; the name
-        # takes the remaining width and truncates with an ellipsis. Layout
-        # runs in the row's own layout(), so it follows the real width.
         cell = ui.TableViewCell()
         PYITableViewCellStyle.subtitle(cell, self.theme)
-        cell.text_label.text = ''
-        cell.detail_text_label.text = ''
-
-        balance_font = ('<system-bold>', 16)
-        name = ui.Label()
-        name.text = row.title
-        name.font = ('<system>', 16)
-        name.number_of_lines = 1
-        name.line_break_mode = ui.LB_TRUNCATE_TAIL
-        name.text_color = 'black'
-
-        tag = None
-        if row.tag_text:
-            tag = ui.Label()
-            tag.text = row.tag_text
-            tag.font = ('<system>', 13)
-            tag.number_of_lines = 1
-            tag.line_break_mode = ui.LB_TRUNCATE_TAIL
-            tag.text_color = (BANNER_WARNING_TEXT if row.tag_kind == TAG_REAUTH
-                              else self.theme.secondary_text_color)
-
-        balance = ui.Label()
-        balance.text = row.balance_text
-        balance.font = balance_font
-        balance.alignment = ui.ALIGN_RIGHT
-        balance.number_of_lines = 1
-        balance.text_color = name.text_color
-
-        container = ui.View()
-        container.flex = 'WH'
-        pad = 16
-        gap = 8
-
-        def do_layout(sender):
-            w, h = sender.width, sender.height
-            bw = ui.measure_string(row.balance_text, font=balance_font)[0]
-            bw = min(bw + 2, max(w - pad * 2, 0))
-            balance.frame = (w - pad - bw, 0, bw, h)
-            nw = max(w - pad * 2 - bw - gap, 0)
-            if tag:
-                name.frame = (pad, h / 2 - 20, nw, 22)
-                tag.frame = (pad, h / 2 + 2, nw, 18)
-            else:
-                name.frame = (pad, 0, nw, h)
-
-        container.layout = lambda: do_layout(container)
-        for v in (name, tag, balance):
-            if v is not None:
-                container.add_subview(v)
+        tag_color = (BANNER_WARNING_TEXT if row.tag_kind == TAG_REAUTH
+                     else self.theme.secondary_text_color)
+        container = AccountRowView(row.title, row.balance_text,
+                                   tag_text=row.tag_text, tag_color=tag_color)
         container.frame = cell.content_view.bounds
         cell.content_view.add_subview(container)
         return cell

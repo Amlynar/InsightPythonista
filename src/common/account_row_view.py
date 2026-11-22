@@ -1,15 +1,13 @@
 import ui
 
 PAD = 16
-GAP = 8
 BALANCE_FONT = ('<system-bold>', 16)
 
 
 class AccountRowView(ui.View):
-    """Name (and optional tag) on the left, balance pinned on the right.
+    """Three stacked lines: name (left), balance (right), optional tag (left).
 
-    The balance is sized to its full text and never truncated; the name and
-    tag take the remaining width and truncate with an ellipsis.
+    Each label spans the full row width, so the balance is never truncated.
     """
 
     def __init__(self, title, balance_text, tag_text=None, tag_color=None,
@@ -46,12 +44,10 @@ class AccountRowView(ui.View):
 
     def layout(self):
         w, h = self.width, self.height
-        bw = ui.measure_string(self.balance_text, font=BALANCE_FONT)[0]
-        bw = min(bw + 2, max(w - PAD * 2, 0))
-        self.balance_label.frame = (w - PAD - bw, 0, bw, h)
-        nw = max(w - PAD * 2 - bw - GAP, 0)
+        lw = max(w - PAD * 2, 0)
+        heights = [20, 20] + ([16] if self.tag_label else [])
+        y = max((h - sum(heights)) / 2, 0)
+        self.name_label.frame = (PAD, y, lw, heights[0])
+        self.balance_label.frame = (PAD, y + heights[0], lw, heights[1])
         if self.tag_label:
-            self.name_label.frame = (PAD, h / 2 - 20, nw, 22)
-            self.tag_label.frame = (PAD, h / 2 + 2, nw, 18)
-        else:
-            self.name_label.frame = (PAD, 0, nw, h)
+            self.tag_label.frame = (PAD, y + heights[0] + heights[1], lw, heights[2])

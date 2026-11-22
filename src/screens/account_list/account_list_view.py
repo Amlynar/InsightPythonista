@@ -10,7 +10,7 @@ from framework.style.style_table_view import PYITableViewStyle
 from framework.style.style_table_view_cell import PYITableViewCellStyle
 from framework.style.theme import PYITheme
 
-ROW_HEIGHT = 64
+ROW_HEIGHT = 72
 
 
 class AccountListView(PYIScreen):

@@ -5,12 +5,12 @@ BALANCE_FONT = ('<system-bold>', 16)
 
 
 class AccountRowView(ui.View):
-    """Three stacked lines: name (left), balance (right), optional tag (left).
+    """Stacked lines: name, balance (right), institution (...mask), optional tag.
 
     Each label spans the full row width, so the balance is never truncated.
     """
 
-    def __init__(self, title, balance_text, tag_text=None, tag_color=None,
+    def __init__(self, title, balance_text, institution_text="", tag_text=None, tag_color=None,
                  text_color='black', **kwargs):
         super().__init__(**kwargs)
         self.flex = 'WH'
@@ -23,6 +23,14 @@ class AccountRowView(ui.View):
         self.name_label.line_break_mode = ui.LB_TRUNCATE_TAIL
         self.name_label.text_color = text_color
         self.add_subview(self.name_label)
+
+        self.institution_label = ui.Label()
+        self.institution_label.text = institution_text
+        self.institution_label.font = ('<system>', 13)
+        self.institution_label.number_of_lines = 1
+        self.institution_label.line_break_mode = ui.LB_TRUNCATE_TAIL
+        self.institution_label.text_color = text_color
+        self.add_subview(self.institution_label)
 
         self.tag_label = None
         if tag_text:
@@ -45,9 +53,11 @@ class AccountRowView(ui.View):
     def layout(self):
         w, h = self.width, self.height
         lw = max(w - PAD * 2, 0)
-        heights = [20, 20] + ([16] if self.tag_label else [])
+        heights = [20, 20, 16] + ([16] if self.tag_label else [])
         y = max((h - sum(heights)) / 2, 0)
-        self.name_label.frame = (PAD, y, lw, heights[0])
-        self.balance_label.frame = (PAD, y + heights[0], lw, heights[1])
+        labels = [self.name_label, self.balance_label, self.institution_label]
         if self.tag_label:
-            self.tag_label.frame = (PAD, y + heights[0] + heights[1], lw, heights[2])
+            labels.append(self.tag_label)
+        for label, lh in zip(labels, heights):
+            label.frame = (PAD, y, lw, lh)
+            y += lh

@@ -35,7 +35,8 @@ def test_list_matches_totals():
 
 def test_cash_rows_tags_and_formatting():
     rows = build_rows(RESPONSE, CASH)
-    assert rows[0].title == "Ally \u2014 Savings"
+    assert rows[0].title == "Savings"
+    assert rows[0].institution_text == "Ally"
     assert rows[0].balance_text == "$1,000.50"
     assert rows[0].tag_text is None
     assert rows[1].tag_kind == TAG_STALE and rows[1].tag_text.startswith("Updated ")

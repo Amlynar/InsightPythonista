@@ -1,4 +1,4 @@
-﻿"""Pure view-model for the per-category account list. No I/O, no UI."""
+"""Pure view-model for the per-category account list. No I/O, no UI."""
 
 from dataclasses import dataclass
 from decimal import Decimal
@@ -14,15 +14,22 @@ TAG_STALE = "stale"
 @dataclass(frozen=True)
 class AccountRow:
     title: str
+    institution_text: str
     balance_text: str
     tag_text: str | None
     tag_kind: str | None
 
 
 def _title(account: dict) -> str:
-    institution = account.get("institutionName")
-    name = account.get("name")
-    return " \u2014 ".join(p for p in (institution, name) if p) or "Account"
+    return account.get("name") or "Account"
+
+
+def _institution(account: dict) -> str:
+    institution = account.get("institutionName") or ""
+    mask = account.get("mask")
+    if mask:
+        return f"{institution} (...{mask})".strip()
+    return institution
 
 
 def _tag(account: dict, reauth_link_ids: set) -> tuple[str | None, str | None]:
@@ -44,5 +51,6 @@ def build_rows(response: dict, category: str) -> list[AccountRow]:
         balance = account.get("balance")
         balance_text = "\u2014" if balance is None else format_money(Decimal(str(balance)))
         tag_text, tag_kind = _tag(account, reauth_ids)
-        rows.append(AccountRow(_title(account), balance_text, tag_text, tag_kind))
+        rows.append(AccountRow(_title(account), _institution(account), balance_text,
+                               tag_text, tag_kind))
     return rows

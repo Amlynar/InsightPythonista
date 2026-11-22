@@ -10,7 +10,7 @@ from framework.style.style_table_view import PYITableViewStyle
 from framework.style.style_table_view_cell import PYITableViewCellStyle
 from framework.style.theme import PYITheme
 
-ROW_HEIGHT = 72
+ROW_HEIGHT = 92
 
 
 class AccountListView(PYIScreen):
@@ -73,6 +73,7 @@ class AccountListView(PYIScreen):
         tag_color = (BANNER_WARNING_TEXT if row.tag_kind == TAG_REAUTH
                      else self.theme.secondary_text_color)
         container = AccountRowView(row.title, row.balance_text,
+                                   institution_text=row.institution_text,
                                    tag_text=row.tag_text, tag_color=tag_color)
         container.frame = cell.content_view.bounds
         cell.content_view.add_subview(container)
